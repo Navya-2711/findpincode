@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Lock, Loader2, AlertCircle } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
-
-const ADMIN_PASSWORD = 'admin123';
+import { loginAdmin, isAdminAuthenticated, logoutAdmin } from '../lib/auth';
 
 export default function Admin() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('pf_admin') === '1');
+  const [authed, setAuthed] = useState(() => typeof window !== 'undefined' && isAdminAuthenticated());
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,18 +14,17 @@ export default function Admin() {
     setLoading(true);
     setError('');
     setTimeout(() => {
-      if (password === ADMIN_PASSWORD) {
-        sessionStorage.setItem('pf_admin', '1');
+      if (loginAdmin(password)) {
         setAuthed(true);
       } else {
-        setError('Incorrect password. Hint: admin123');
+        setError('Incorrect password.');
       }
       setLoading(false);
     }, 300);
   };
 
   if (authed) {
-    return <AdminDashboard onLogout={() => { sessionStorage.removeItem('pf_admin'); setAuthed(false); }} />;
+    return <AdminDashboard onLogout={() => { logoutAdmin(); setAuthed(false); }} />;
   }
 
   return (

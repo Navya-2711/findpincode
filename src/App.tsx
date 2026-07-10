@@ -5,6 +5,7 @@ import SearchResults from './pages/SearchResults';
 import PincodeDetail from './pages/PincodeDetail';
 import StatesList from './pages/StatesList';
 import StateDetail from './pages/StateDetail';
+import DistrictDetail from './pages/DistrictDetail';
 import BlogList from './pages/BlogList';
 import BlogDetail from './pages/BlogDetail';
 import Contact from './pages/Contact';
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
       { path: 'pincode/:id', element: <PincodeDetail /> },
       { path: 'states', element: <StatesList /> },
       { path: 'state/:state', element: <StateDetail /> },
+      { path: 'state/:state/district/:district', element: <DistrictDetail /> },
       { path: 'blog', element: <BlogList /> },
       { path: 'blog/:slug', element: <BlogDetail /> },
       { path: 'contact', element: <Contact /> },

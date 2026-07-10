@@ -1,8 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Building2, Mail, Search as SearchIcon, ArrowRight, TrendingUp } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock3, Mail, MapPin, TrendingUp } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
-import { getAllStates } from '../lib/api';
+import { getAllStates, getPublishedPosts } from '../lib/api';
+import { setMetadata, setStructuredData } from '../lib/seo';
+import type { BlogPost } from '../lib/supabase';
+
+const RECENT_SEARCHES_STORAGE_KEY = 'pincode-finder-recent-searches';
+
+const popularSearches = [
+  { label: '110001', description: 'New Delhi', type: 'Pincode' },
+  { label: 'Connaught Place', description: 'Area / landmark', type: 'Area' },
+  { label: 'Mumbai', description: 'City', type: 'City' },
+  { label: 'Karnataka', description: 'State', type: 'State' },
+  { label: 'Bengaluru Urban', description: 'District', type: 'District' },
+  { label: 'Delhi GPO', description: 'Post office', type: 'Post Office' },
+];
 
 const popularPincodes = [
   { pincode: '110001', area: 'New Delhi', state: 'Delhi' },
@@ -11,135 +24,322 @@ const popularPincodes = [
   { pincode: '700001', area: 'Kolkata', state: 'West Bengal' },
   { pincode: '600001', area: 'Chennai', state: 'Tamil Nadu' },
   { pincode: '500001', area: 'Hyderabad', state: 'Telangana' },
-  { pincode: '380001', area: 'Ahmedabad', state: 'Gujarat' },
-  { pincode: '411001', area: 'Pune', state: 'Maharashtra' },
 ];
+
+const stateDescriptions: Record<string, string> = {
+  Delhi: 'Capital city, business centres, and dense urban delivery zones.',
+  Maharashtra: 'Major metro corridors and high-volume postal services.',
+  Karnataka: 'Technology hubs and fast-growing suburban regions.',
+  'Tamil Nadu': 'Historic districts and modern urban delivery networks.',
+  'West Bengal': 'Cultural landmarks and city-wide postal coverage.',
+  Telangana: 'Rapidly expanding metros with strong logistics reach.',
+  Gujarat: 'Industrial corridors and vibrant commercial districts.',
+  Rajasthan: 'Wide regional coverage spanning cities and towns.',
+};
 
 export default function Home() {
   const [states, setStates] = useState<string[]>([]);
+  const [latestPosts, setLatestPosts] = useState<BlogPost[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAllStates()
-      .then(setStates)
-      .catch(() => setStates([]))
-      .finally(() => setLoading(false));
+    setMetadata({
+      title: 'Find PIN codes and post offices in India',
+      description: 'Search India PIN codes, post office details, districts, cities, and states. Access postal coverage and delivery information instantly.',
+      url: '/',
+      type: 'website',
+    });
+    setStructuredData({
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Pincode Finder',
+      url: window.location.origin,
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${window.location.origin}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    });
+
+    let active = true;
+
+    const loadData = async () => {
+      try {
+        const [stateData, postsData] = await Promise.all([getAllStates(), getPublishedPosts()]);
+        if (!active) return;
+
+        setStates(stateData);
+        setLatestPosts(postsData.slice(0, 3));
+      } catch {
+        if (active) {
+          setStates([]);
+          setLatestPosts([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = window.localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as string[];
+          setRecentSearches(parsed.filter(Boolean));
+        }
+      } catch {
+        window.localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY);
+      }
+    }
+
+    return () => {
+      active = false;
+      setStructuredData(null);
+    };
   }, []);
 
+  const featuredStates = useMemo(() => states.slice(0, 8), [states]);
+
   return (
-    <div>
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-blue-800 text-white">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
-          <div className="text-center max-w-3xl mx-auto">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium ring-1 ring-white/20">
-              <MapPin className="h-4 w-4" /> India's Largest Pincode Directory
-            </span>
-            <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-              Find Any Pincode in India
-            </h1>
-            <p className="mt-5 text-lg sm:text-xl text-blue-100 leading-relaxed">
-              Search by pincode number, post office name, district, or state.
-              Get complete post office details instantly.
-            </p>
-            <div className="mt-10 max-w-2xl mx-auto">
-              <SearchBar autoFocus />
+    <div className="bg-slate-50">
+      <section className="relative overflow-hidden bg-[linear-gradient(135deg,_#0f172a_0%,_#1d4ed8_45%,_#2563eb_100%)] text-white">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, white 1px, transparent 1px)', backgroundSize: '34px 34px' }} />
+        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+            <div className="max-w-2xl">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium ring-1 ring-white/20">
+                <MapPin className="h-4 w-4" /> India’s most trusted pincode directory
+              </span>
+              <h1 className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Find PIN codes, post offices, districts, cities, and states in seconds.
+              </h1>
+              <p className="mt-5 text-lg leading-8 text-blue-100 sm:text-xl">
+                Search by PIN code, post office name, area, district, city, or state and access trusted postal details instantly.
+              </p>
+
+              <div className="mt-8 max-w-2xl">
+                <SearchBar autoFocus />
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                {popularSearches.slice(0, 4).map((item) => (
+                  <Link
+                    key={item.label}
+                    to={`/search?q=${encodeURIComponent(item.label)}`}
+                    className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm text-blue-50 transition hover:bg-white/20"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {popularPincodes.map((p) => (
-                <Link
-                  key={p.pincode}
-                  to={`/search?q=${p.pincode}`}
-                  className="rounded-full bg-white/10 px-3 py-1 text-sm text-blue-50 hover:bg-white/20 transition-colors ring-1 ring-white/10"
-                >
-                  {p.pincode}
-                </Link>
-              ))}
+
+            <div className="rounded-3xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-md">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">Quick access</p>
+                  <h2 className="mt-2 text-xl font-semibold text-white">Popular destinations</h2>
+                </div>
+                <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-blue-100">Updated daily</span>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {popularPincodes.slice(0, 4).map((item) => (
+                  <Link
+                    key={item.pincode}
+                    to={`/search?q=${item.pincode}`}
+                    className="flex items-center justify-between rounded-2xl border border-white/15 bg-slate-950/20 px-4 py-3 transition hover:bg-slate-950/30"
+                  >
+                    <div>
+                      <p className="font-semibold text-white">{item.pincode}</p>
+                      <p className="text-sm text-blue-100">{item.area}, {item.state}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-blue-200" />
+                  </Link>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-white/15 bg-slate-950/20 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Clock3 className="h-4 w-4" /> Recent searches
+                </div>
+                {recentSearches.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {recentSearches.slice(0, 4).map((item) => (
+                      <Link
+                        key={item}
+                        to={`/search?q=${encodeURIComponent(item)}`}
+                        className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-blue-50 transition hover:bg-white/20"
+                      >
+                        {item}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-blue-100">Your recent lookups will appear here after you search.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent" />
       </section>
 
-      {/* Stats */}
-      <section className="bg-white -mt-8 relative z-10 max-w-5xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-2xl border border-gray-100 bg-white shadow-lg p-6">
+      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-4">
           {[
-            { icon: MapPin, label: 'Pincodes', value: '1,54,000+' },
-            { icon: Building2, label: 'Post Offices', value: '1,54,965' },
-            { icon: Mail, label: 'States & UTs', value: '28 + 8' },
-            { icon: TrendingUp, label: 'Daily Searches', value: '50,000+' },
-          ].map((s) => (
-            <div key={s.label} className="text-center">
-              <s.icon className="mx-auto h-7 w-7 text-blue-600" />
-              <p className="mt-2 text-2xl font-bold text-gray-900">{s.value}</p>
-              <p className="text-sm text-gray-500">{s.label}</p>
+            { icon: MapPin, label: 'PIN codes', value: '1,54,000+' },
+            { icon: Mail, label: 'Post offices', value: '1,54,965' },
+            { icon: ArrowRight, label: 'States & UTs', value: '28 + 8' },
+            { icon: TrendingUp, label: 'Daily searches', value: '50,000+' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl bg-slate-50 p-4 text-center">
+              <item.icon className="mx-auto h-7 w-7 text-blue-600" />
+              <p className="mt-3 text-2xl font-bold text-slate-900">{item.value}</p>
+              <p className="text-sm text-slate-500">{item.label}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Browse by state */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Browse by State</h2>
-            <p className="mt-2 text-gray-600">Find pincodes by selecting your state</p>
+      <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Popular searches</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Search suggestions for every need</h2>
+              </div>
+              <Link to="/search?q=Delhi" className="text-sm font-medium text-blue-600 transition hover:text-blue-700">
+                Try a sample
+              </Link>
+            </div>
+            <div className="mt-6 space-y-3">
+              {popularSearches.map((item) => (
+                <Link
+                  key={item.label}
+                  to={`/search?q=${encodeURIComponent(item.label)}`}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">{item.label}</p>
+                    <p className="text-sm text-slate-500">{item.description}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {item.type}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
-          <Link to="/states" className="hidden sm:inline-flex items-center gap-1 text-blue-600 font-medium hover:gap-2 transition-all">
-            View all <ArrowRight className="h-4 w-4" />
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Trending PIN codes</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Popular postal lookups</h2>
+              </div>
+              <Link to="/search?q=400001" className="text-sm font-medium text-blue-600 transition hover:text-blue-700">
+                Explore more
+              </Link>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {popularPincodes.map((item) => (
+                <Link
+                  key={item.pincode}
+                  to={`/search?q=${item.pincode}`}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <p className="text-lg font-bold text-slate-900">{item.pincode}</p>
+                  <p className="mt-1 text-sm text-slate-600">{item.area}</p>
+                  <p className="text-sm text-slate-500">{item.state}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Browse by state</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Find postal information by state</h2>
+          </div>
+          <Link to="/states" className="hidden items-center gap-1 text-sm font-medium text-blue-600 transition hover:gap-2 sm:inline-flex">
+            View all states <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-xl bg-gray-100 animate-pulse" />
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {states.slice(0, 18).map((state) => (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {featuredStates.map((state) => (
               <Link
                 key={state}
                 to={`/state/${encodeURIComponent(state.toLowerCase().replace(/\s+/g, '-'))}`}
-                className="group flex flex-col items-start gap-1 rounded-xl border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-md transition-all"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-md"
               >
-                <MapPin className="h-5 w-5 text-blue-500 group-hover:text-blue-600" />
-                <span className="text-sm font-medium text-gray-800 group-hover:text-blue-700">{state}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-slate-900">{state}</h3>
+                  </div>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">View</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  {stateDescriptions[state] || 'Discover pincode details and local postal coverage for this state.'}
+                </p>
               </Link>
             ))}
           </div>
         )}
-
-        <div className="mt-6 text-center sm:hidden">
-          <Link to="/states" className="inline-flex items-center gap-1 text-blue-600 font-medium">
-            View all states <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
       </section>
 
-      {/* Popular searches */}
-      <section className="bg-gray-50 border-t border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Popular Pincode Searches</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {popularPincodes.map((p) => (
+      <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Latest blogs</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Helpful articles about PIN codes and postal services</h2>
+          </div>
+          <Link to="/blog" className="hidden items-center gap-1 text-sm font-medium text-blue-600 transition hover:gap-2 sm:inline-flex">
+            Read all blogs <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {latestPosts.length > 0 ? (
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {latestPosts.map((post) => (
               <Link
-                key={p.pincode}
-                to={`/search?q=${p.pincode}`}
-                className="group flex items-center justify-between rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-md transition-all"
+                key={post.id}
+                to={`/blog/${post.slug}`}
+                className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-md"
               >
-                <div>
-                  <p className="text-lg font-bold text-gray-900">{p.pincode}</p>
-                  <p className="text-sm text-gray-500">{p.area}, {p.state}</p>
+                <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
+                  <BookOpen className="h-4 w-4" /> Blog guide
                 </div>
-                <SearchIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+                <h3 className="mt-4 text-xl font-semibold text-slate-900 group-hover:text-blue-700">{post.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{post.excerpt || 'Explore postal guidance and tips for finding the right pincode.'}</p>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-blue-600">
+                  Read more <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </div>
               </Link>
             ))}
           </div>
-        </div>
+        ) : (
+          <div className="mt-8 rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">
+            Blog content will appear here when new posts are published.
+          </div>
+        )}
       </section>
     </div>
   );
